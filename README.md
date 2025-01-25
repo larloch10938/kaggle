@@ -1,3 +1,3 @@
 # kaggle
 
-Sara will be working on the Titanic dataset
+General repo for testing out kaggle competitions and other data science projects.
