@@ -1,2 +1,3 @@
 *.csv
 playground-series-s6e10/data/*
+.DS_Store
