@@ -7,7 +7,8 @@ Rules of the log:
 - All validation AUCs use the same stratified 80/20 split, seed 42, unless the "validation" column says otherwise - so numbers in this table are comparable.
 - LB AUC is recorded only when actually observed after a real submission. Never estimate it, and never compare a local val AUC against leaderboard ranks - the public LB scores a different sample (~20% of test), so local-to-LB comparisons are only loose expectations, not rank predictions.
 - One change per experiment, so the log shows what actually moves the score.
-- Exp 2/3 use the holdout split both for early stopping and for evaluation, so those val AUCs are mildly optimistic (selection on the evaluated set). Fine for direction-finding; before trusting a tuned config, re-score with k-fold OOF and log it separately.
+- Exp 2/3/6c use the holdout split both for early stopping and for evaluation, so those val AUCs are mildly optimistic (selection on the evaluated set). Fine for direction-finding; before trusting a tuned config, re-score with k-fold OOF and log it separately.
+- A delta on a single split is a hint, not a verdict. Small deltas (positive or negative) are logged as "unconfirmed" until a k-fold OOF re-score confirms or kills them.
 
 Leaderboard reference (checked 2026-10-16): #1 = 0.96273; ranks ~19-50 compressed at 0.96190; ~2,070 teams.
 
@@ -16,16 +17,23 @@ Leaderboard reference (checked 2026-10-16): #1 = 0.96273; ranks ~19-50 compresse
 | 0 | 2026-10-16 | logistic regression baseline (hello.ipynb re-scored) | median impute + scaler + one-hot, max_iter=200 | 42 | stratified 80/20 | 0.92046 | 0.92227 | ~1 min | baseline; LB from Andrea's own submission (23:11 BST). LB - local = +0.0018 |
 | 1 | 2026-10-16 | random forest (random_forest.ipynb) | 200 trees, defaults, no scaler | 42 | stratified 80/20 | 0.95351 | 0.95367 | 67s | keep; +0.03305 vs Exp 0. LB from Andrea's own submission (23:44 BST). LB - local = +0.0002: the holdout tracks the public LB well |
 | 2 | 2026-10-16 | LightGBM raw features (lightgbm.ipynb) | lr=0.05, num_leaves=63, early stop 50 | 42 | stratified 80/20 (holdout also used for early stop) | 0.95760 | | 23s (whole notebook) | keep; +0.00409 vs Exp 1. best_iteration=418; winner -> submission_lgbm.csv |
-| 3 | 2026-10-16 | LightGBM + engineered (total_delay, delay_diff, service_mean) | same as Exp 2, one change | 42 | stratified 80/20 (holdout also used for early stop) | 0.95748 | | 23s (whole notebook) | no gain on this split (-0.00012 vs Exp 2, within single-split noise - NOT evidence the features hurt). Set aside; revisit under k-fold. best_iteration=290 |
+| 3 | 2026-10-16 | LightGBM + engineered (total_delay, delay_diff, service_mean) | same as Exp 2, one change | 42 | stratified 80/20 (holdout also used for early stop) | 0.95748 | | 23s (whole notebook) | -0.00012 vs Exp 2 on this split - too small to call; unconfirmed until the fold check. Set aside; revisit under k-fold. best_iteration=290 |
+| 4 | 2026-10-17 | RF tuned: 400 trees, min_samples_leaf=5 | n_est=400, leaf=5, rest=Exp 1 | 42 | stratified 80/20 | 0.95551 | | 234s (whole round-2 notebook) | new RF reference: +0.00200 vs Exp 1 on this split; still below LightGBM |
+| 5 | 2026-10-17 | RF + max_features=0.5 | as Exp 4, one knob | 42 | stratified 80/20 | 0.95513 | | (same run) | -0.00038 vs Exp 4 on this split - too small to call; unconfirmed until folds |
+| 6a | 2026-10-17 | logistic + engineered set (10 features) | Exp 0 pipeline, 31 features | 42 | stratified 80/20 | 0.92796 | | (same run) | +0.00750 vs Exp 0 on this split - largest round-2 delta, unconfirmed until folds; still far behind trees |
+| 6b | 2026-10-17 | Exp 4 RF config + engineered set | as Exp 4, 31 features | 42 | stratified 80/20 | 0.95534 | | (same run) | -0.00016 vs Exp 4 on this split - too small to call; unconfirmed until folds |
+| 6c | 2026-10-17 | LightGBM + engineered set | as Exp 2, 31 features | 42 | stratified 80/20 (early stop on holdout) | 0.95740 | | (same run) | -0.00020 vs Exp 2 on this split - too small to call; unconfirmed until folds. best_iteration=363 |
+| 7 | 2026-10-17 | blend 50/50: Exp 4 RF + Exp 2 LightGBM | mean of probabilities | 42 | stratified 80/20 | 0.95690 | | (same run) | -0.00070 vs best single (Exp 2) on this split - no evidence blending helps here; re-tested on OOF in round 3 |
 
 ## Run notes
 
 - 2026-10-16: first execution of Exp 3 failed with a LightGBMError - the authored scoring line mistakenly evaluated the engineered model on the NON-engineered validation frame (predict_proba(X_val) instead of X_val_e). Fixed on review and the whole notebook rerun cleanly; the numbers above are from the corrected run. Logged because silent reruns hide exactly this kind of bug.
+- 2026-10-17 (round 2): nothing beat Exp 2 raw LightGBM (0.95760) - every round-2 delta vs the incumbent was negative on this split. The round-2 refit cell compared candidates only within the round, so it wrote submission_round2.csv from Exp 6c (0.95740), below the incumbent. Caught on review: submission_round2.csv should NOT be submitted; submission_lgbm.csv (Exp 2) remains the best submission candidate. The notebook now carries a corrected refit cell with an incumbent guard (marked, not re-executed). The 0.960 local target was NOT reached. Mandatory next step before more tuning: 5-fold OOF re-score of the top configs - this holdout has guided many selections and its estimates drift optimistic.
 
 ## Next candidates (pick one per session, in rough order)
 
-- k-fold (5-fold stratified) OOF re-score of the best model: required before any tuning decisions, since Exp 2/3 selected tree count on the evaluated holdout
-- num_leaves / learning_rate variation on the winner, one at a time
+- 5-fold OOF re-score of the top configs (round 3, required checkpoint - no more tuning decisions until this lands)
+- num_leaves / learning_rate variation on the OOF winner, one at a time, selected on OOF
+- blend weight search on OOF predictions (round 3 includes a first look)
 - handle the 292 missing Arrival Delay values deliberately vs LightGBM native NaN
-- blend RF + LightGBM predictions (mean of probabilities)
-- original passenger-survey dataset as extra training data (legit external data; check licensing/provenance)
+- original passenger-survey dataset as extra training data (legit external data; check licensing/provenance, needs Andrea's OK first)
