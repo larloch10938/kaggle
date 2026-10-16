@@ -29,6 +29,9 @@ Leaderboard reference (checked 2026-10-16): #1 = 0.96273; ranks ~19-50 compresse
 | 9 | 2026-10-17 | OOF: LightGBM + engineered set | same protocol as Exp 8 | 42 | 5-fold OOF | 0.95831 +/- 0.00056 | | (same run) | paired fold deltas vs Exp 8 all negative (-0.00026 -0.00020 -0.00011 -0.00004 -0.00020, mean -0.00016): working signal the set slightly hurts LightGBM. Dropped for trees - no further FE investment without a new hypothesis. Stays on the table for logistic |
 | 10 | 2026-10-17 | OOF: RF 400/leaf5 raw | same protocol as Exp 8 | 42 | 5-fold OOF | 0.95658 +/- 0.00042 | | (same run) | below the incumbent on all 5 folds (paired deltas about -0.0019); RF stays the second family |
 | 11 | 2026-10-17 | OOF blend scan (LightGBM with RF) | weights 0.3-0.7 on OOF preds | 42 | 5-fold OOF | best 0.95832 pooled (0.7 LGBM + 0.3 RF) | | (same run) | exploratory: weight chosen on the same OOF it was scored on, and this pooled AUC is not directly comparable to the mean-of-fold numbers above (pooled per-model numbers pending). No action; incumbent stands |
+| 12 | 2026-10-17 | OOF: RF 400, min_samples_leaf=10 | one knob from Exp 10 (leaf 5 -> 10) | 42 | 5-fold OOF | 0.95687 +/- 0.00044 | | 415s (whole round-4 notebook) | paired deltas vs incumbent all negative (mean -0.00160): working signal leaf=10 is worse than leaf=5 here; no further leaf-size steps planned |
+| 13 | 2026-10-17 | OOF: RF 400, leaf=5, max_depth=25 | one knob from Exp 10 (depth cap 25) | 42 | 5-fold OOF | 0.95703 +/- 0.00040 | | (same run) | paired deltas all negative (mean -0.00144): working signal the depth cap hurts; RF sits at ~0.957 under this protocol with categorical representation and tree count still untested - no gain from these two knobs, family not written off |
+| 14 | 2026-10-17 | OOF: LightGBM lr=0.03, n_estimators=3000 | one knob from Exp 8 (lr 0.05 -> 0.03) | 42 | 5-fold OOF | 0.95849 +/- 0.00058 | | (same run) | mean +0.00002 vs incumbent, within 2x fold-delta spread: NO SIGNAL; best_iterations 375/463/409/329/468 (incumbent range 183-555). No refit earned - incumbent Exp 2 stands, submission_lgbm.csv remains the only submission candidate |
 
 ## Run notes
 
@@ -38,7 +41,10 @@ Leaderboard reference (checked 2026-10-16): #1 = 0.96273; ranks ~19-50 compresse
 
 ## Next candidates (pick one per session, in rough order)
 
-- round 4 (running): one-knob moves under the same OOF protocol - RF min_samples_leaf=10, RF max_depth=25, LightGBM learning_rate=0.03
-- num_leaves variation on the OOF winner, one at a time, selected on OOF
+- 2026-10-17 (round 4): executed cleanly (415s wall, zero errors, no execution fixes needed). One disclosed executor addition: an appended cell caches this round's OOF predictions, fold AUCs, configs and dataset identity (train.csv sha256, row count) to the gitignored oof_cache/ directory so later rounds can run pooled/paired checks without rerunning - no experiment code changed. Outcomes: both RF one-knob moves (leaf=10, max_depth=25) are working-signal worse than the plain Exp 10 RF - these two regularization knobs gave no gain, other RF levers remain untested; LightGBM lr=0.03 ties the incumbent (+0.00002 mean, no signal). No candidate earned a refit and no submission file was written. Incumbent Exp 2 raw LightGBM stands. The 0.960 target was NOT reached on OOF (best 0.95849). Round-3 OOF arrays were never persisted, so round-4 pooling uses the incumbent fold constants only.
+- round 5 (running): num_leaves 63 -> 127 directly on the incumbent; categorical representation on both families (ordinal for RF, one-hot for LightGBM); error-analysis-driven interaction features (new hypothesis)
+- further one-knob LightGBM moves on the incumbent as evidence justifies (min_data_in_leaf, feature_fraction/bagging)
+- round 5 (running): num_leaves 63 -> 127 directly on the incumbent; categorical representation on both families (ordinal for RF, one-hot for LightGBM); error-analysis-driven interaction features (new hypothesis)
+- further one-knob LightGBM moves on the incumbent as evidence justifies (min_data_in_leaf, feature_fraction/bagging)
 - handle the 292 missing Arrival Delay values deliberately vs LightGBM native NaN
 - original passenger-survey dataset as extra training data (legit external data; check licensing/provenance, needs Andrea's OK first)
